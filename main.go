@@ -1,56 +1,43 @@
-package file_watcher
+package main
 
 import (
 	"fmt"
-	"github.com/howeyc/fsnotify"
+	"github.com/fatih/color"
+	"github.com/fsnotify/fsnotify"
+	"io/ioutil"
 	"log"
-	"os"
-	"regexp"
-	"bufio"
+	"path/filepath"
+	"time"
 )
 
-type VagrantFile struct {
-	fpath string
-	valid bool
+type logWriter struct {
 }
 
-func (v *VagrantFile) parse() []string {
-	file, err := os.Open(v.fpath)
-	defer file.Close()
-
-	if err != nil {
-		fmt.Printf("error opening Vagrant file: %v\n", err)
-		os.Exit(1)
-	}
-
-	re_is_folder := regexp.MustCompile(`\s?config.vm.synced_folder\s?`)
-	re_is_vagrant := regexp.MustCompile(`\/vagrant`)
-
-	var lines []string
-	scanner := bufio.NewScanner(file)
-    for scanner.Scan() {
-		if text := scanner.Text(); re_is_folder.MatchString(text) && re_is_vagrant.MatchString(text) {
-			lines = append(lines, text)
-			fmt.Println("Matched line: %s", text)
-		} else {
-			fmt.Println("Did Not Matched line: %s", text)
-		}
-    }
-
-    if err := scanner.Err(); err != nil {
-        log.Fatal(err)
-    }
-
-	return lines
+func (writer logWriter) Write(bytes []byte) (int, error) {
+	printTime := color.New(color.FgCyan, color.Bold).SprintFunc()
+	timestamp := time.Now().Format("2006-01-02 15:04:05 PM")
+	return fmt.Printf("%s TRACKING... %s", printTime(timestamp), string(bytes))
 }
 
 func main() {
-	fmt.Printf("hello, world\n")
+	log.SetFlags(0)
+	log.SetOutput(new(logWriter))
 
-	watcher, err := fsnotify.NewWatcher()
+	baseDir, err := filepath.Abs(filepath.Dir("./"))
+
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	fmt.Printf("Tracking changes to %s\n", baseDir)
+
+	watcher, err := fsnotify.NewWatcher()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer watcher.Close()
 
 	done := make(chan bool)
 
@@ -58,33 +45,29 @@ func main() {
 	go func() {
 		for {
 			select {
-			case ev := <-watcher.Event:
-				log.Println("event:", ev)
-			case err := <-watcher.Error:
-				log.Println("error:", err)
+			case ev := <-watcher.Events:
+				log.Println("[EVENT]: ", ev)
+			case err := <-watcher.Errors:
+				log.Println("[ERROR]: ", err)
 			}
 		}
 	}()
 
-	vfile := VagrantFile{fpath: "./VagrantFile"}
+	contents, err := ioutil.ReadDir(baseDir)
 
-	for _, file := range vfile.parse() {
-		os.Expand()
-
-	    err = watcher.AddWatch(file)
-	    if err != nil {
-	        log.Fatal(err)
-	    }
-	}
-
-	err = watcher.Watch("testDir")
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	for _, fileOrDir := range contents {
+		err = watcher.Add(baseDir + "/" + fileOrDir.Name())
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	// Hang so program doesn't exit
 	<-done
 
 	/* ... do stuff ... */
-	watcher.Close()
 }
