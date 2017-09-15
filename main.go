@@ -4,15 +4,14 @@ import (
 	"fmt"
 	"github.com/fatih/color"
 	"github.com/fsnotify/fsnotify"
-	//"io/ioutil"
 	"log"
-	"path/filepath"
-	"time"
 	"os"
+	"path/filepath"
+	"regexp"
+	"time"
 )
 
-type logWriter struct {
-}
+type logWriter struct{}
 
 func (writer logWriter) Write(bytes []byte) (int, error) {
 	printTime := color.New(color.FgCyan, color.Bold).SprintFunc()
@@ -53,8 +52,14 @@ func main() {
 			}
 		}
 	}()
-
-	err = RecursiveWatch(baseDir, watcher, true)
+	excludePatterns := []string{
+		".git",
+		"node_modules",
+		".idea",
+		".vagrant",
+		".sass-cache",
+	}
+	err = RecursiveWatch(baseDir, watcher, excludePatterns, true)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -63,18 +68,37 @@ func main() {
 	<-done
 }
 
-func RecursiveWatch(path string, watcher *fsnotify.Watcher, debug bool) (err error) {
+func RecursiveWatch(path string, watcher *fsnotify.Watcher, exclude []string, debug bool) (err error) {
 	err = filepath.Walk(path, func(walkPath string, fi os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if debug {
-			log.Printf("Watching: %s", walkPath)
+
+		if !stringInSlice(walkPath, exclude) {
+			if debug {
+				log.Printf("Watching: %s", walkPath)
+			}
+			if err = watcher.Add(walkPath); err != nil {
+				return err
+			}
 		}
-		if err = watcher.Add(walkPath); err != nil {
-			return err
-		}
+
 		return nil
 	})
 	return err
+}
+
+func stringInSlice(str string, list []string) bool {
+	for _, pattern := range list {
+		match, err := regexp.MatchString(pattern, str)
+
+		if err != nil {
+			log.Fatal("Trouble excluding directory")
+		}
+
+		if match {
+			return true
+		}
+	}
+	return false
 }
