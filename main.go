@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"time"
+	"os/exec"
 )
 
 type logWriter struct{}
@@ -47,6 +48,10 @@ func main() {
 			select {
 			case ev := <-watcher.Events:
 				log.Println("[EVENT]: ", ev)
+				if err := exec.Command("bash", "-c", "vagrant rsync").Run(); err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					os.Exit(1)
+				}
 			case err := <-watcher.Errors:
 				log.Println("[ERROR]: ", err)
 			}
@@ -75,11 +80,13 @@ func RecursiveWatch(path string, watcher *fsnotify.Watcher, exclude []string, de
 		}
 
 		if !stringInSlice(walkPath, exclude) {
-			if debug {
-				log.Printf("Watching: %s", walkPath)
-			}
-			if err = watcher.Add(walkPath); err != nil {
-				return err
+			if fi.IsDir() {
+				if debug {
+					log.Printf("Watching: %s", walkPath)
+				}
+				if err = watcher.Add(walkPath); err != nil {
+					return err
+				}
 			}
 		}
 
