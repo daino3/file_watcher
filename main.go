@@ -10,12 +10,13 @@ import (
 	"regexp"
 	"time"
 	"os/exec"
+	"flag"
 )
 
 type logWriter struct{}
 
 func (writer logWriter) Write(bytes []byte) (int, error) {
-	printTime := color.New(color.FgCyan, color.Bold).SprintFunc()
+	printTime := color.New(color.FgHiYellow, color.Bold).SprintFunc()
 	timestamp := time.Now().Format("2006-01-02 15:04:05 PM")
 	return fmt.Printf("%s %s", printTime(timestamp), string(bytes))
 }
@@ -23,6 +24,9 @@ func (writer logWriter) Write(bytes []byte) (int, error) {
 func main() {
 	log.SetFlags(0)
 	log.SetOutput(new(logWriter))
+
+	debug := flag.Bool("debug", false, "set debug verbosity for directory watching")
+	flag.Parse()
 
 	baseDir, err := filepath.Abs(filepath.Dir("./"))
 
@@ -64,7 +68,7 @@ func main() {
 		".vagrant",
 		".sass-cache",
 	}
-	err = RecursiveWatch(baseDir, watcher, excludePatterns, true)
+	err = RecursiveWatch(baseDir, watcher, excludePatterns, *debug)
 	if err != nil {
 		log.Fatal(err)
 	}
